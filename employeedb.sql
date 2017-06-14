@@ -5,6 +5,42 @@ IF OBJECT_ID('tempdb..#DEPARTMENT') IS NOT NULL DROP TABLE #DEPARTMENT
 IF OBJECT_ID('tempdb..#ENTRIES') IS NOT NULL DROP TABLE #ENTRIES
 IF OBJECT_ID('tempdb..#ALIASES') IS NOT NULL DROP TABLE #ALIASES
 IF OBJECT_ID('tempdb..#CONTACTTYPES') IS NOT NULL DROP TABLE #CONTACTTYPES
+IF OBJECT_ID('tempdb..#LOCATION') IS NOT NULL DROP TABLE #LOCATION
+
+
+SELECT * FROM  ORACLE_OLTPPROD_EOSDBA..GRANDEWEB.EMPLOYEE
+
+SELECT
+    IDENTITY(INT, 1, 1) as locationId,
+    oldLocationId, 
+    locationName,
+    address1, 
+    address2, 
+    city,
+    state,
+    postalCode, 
+    mainPhone
+INTO
+    #LOCATION
+FROM
+    (SELECT
+        DISTINCT
+            LOC.ID oldLocationId, 
+            LOC.FACILITY locationName, 
+            LOC.ADDRESS1 address1, 
+            LOC.ADDRESS2 address2, 
+            LOC.CITY city, 
+            LOC.ST_ABBR state, 
+            SUBSTRING(LOC.ZIP, 1, 5) postalCode,
+            LOC.MAINPHN mainPhone
+
+    FROM 
+        ORACLE_OLTPPROD_EOSDBA..GRANDEWEB.EMPLOYEE EMP
+        INNER JOIN ORACLE_OLTPPROD_EOSDBA..GRANDEWEB.LOCATION LOC on EMP.LOC_ID = LOC.ID
+    WHERE
+        EMP.STATUS = 'A'
+    ) AA
+
 
 /*Base Employee*/
 SELECT
@@ -23,6 +59,7 @@ SELECT
     emp.ANNIVERSARY anniversary,
     LOWER(samaccountname) username,
     emp.TITLE title,
+    emp.LOC_ID,
     dept.DPTNMBR departmentNumber,
     dept.NAME departmentName,
     ceridianId ceridianId,
@@ -240,7 +277,7 @@ CREATE TABLE [EMPDB].[T_EMPLOYEE]  (
 	[employeeId]    	bigint NOT NULL IDENTITY(1,1),
 	[firstName]     	varchar(21) NULL,
 	[lastName]      	varchar(21) NULL,
-	[mail]          	nvarchar(4000) NULL,
+	[mail]          	varchar(1000) NULL,
 	[organizationId]	int NOT NULL,
 	[titleId]       	int NOT NULL,
 	[departmentId]  	int NOT NULL,
@@ -263,11 +300,24 @@ GO
 CREATE TABLE [EMPDB].[T_USER]  ( 
 	[userId]    	bigint IDENTITY(1,1) NOT NULL,
 	[employeeId]	bigint NULL,
-	[username]  	nvarchar(4000) NULL,
+	[username]  	varchar(1000) NULL,
 	[objectGUID]	uniqueidentifier NULL,
     CONSTRAINT [PK_USER#userId] PRIMARY KEY NONCLUSTERED([userId]) 
 )
 GO
+DROP TABLE EMPDB.T_LOCATION
+CREATE TABLE [EMPDB].[T_LOCATION]  ( 
+	[locationId]   bigint IDENTITY(1,1) NOT NULL,
+    [locationName] varchar(1000) NOT NULL,
+	[address1]	varchar(1000) NOT NULL,
+	[address2] varchar(1000) NOT NULL,
+	[city]	varchar(1000) NOT NULL,
+    [state]	varchar(1000) NOT NULL,
+    [postalCode]	varchar(1000) NOT NULL,
+    [mainPhone]	varchar(1000) NOT NULL,
+    CONSTRAINT [PK_LOCATION#locationId] PRIMARY KEY NONCLUSTERED([locationId]) 
+)
+GO
 
 CREATE TABLE [EMPDB].[T_EMPLOYEE_ANSWER]  ( 
 	[employeeAnswerId]    	bigint IDENTITY(1,1) NOT NULL,
@@ -288,6 +338,16 @@ CREATE TABLE [EMPDB].[T_EMPLOYEE_ANSWER]  (
 	[answer1Id]  	varchar(1000) NOT NULL,
     [answer2Id]  	varchar(1000) NOT NULL,
     CONSTRAINT [PK_EMPLOYEE_ANSWER#employeeAnswerId] PRIMARY KEY NONCLUSTERED([employeeAnswerId]) 
+)
+GO
+
+CREATE TABLE [EMPDB].[T_EMPLOYEE_ANS]  ( 
+	[employeeAnswerId]    	bigint IDENTITY(1,1) NOT NULL,
+    [employeeId] bigint NOT NULL,
+    [questionNumber] int NOT NULL,
+	[questionId]	bigint NOT NULL,
+	[answerId]  	varchar(1000) NOT NULL,
+    CONSTRAINT [PK_EMPLOYEE_ANS#employeeAnswerId] PRIMARY KEY NONCLUSTERED([employeeAnswerId]) 
 )
 GO
 
@@ -447,7 +507,10 @@ SELECT
     MGR.employeeId managerId,
     CASE WHEN MGR.employeeId IS NULL THEN NULL ELSE CONCAT(MGR.lastName, ', ', MGR.firstName) END managerName,
     CASE WHEN AWS.employeeAnswerId IS NULL THEN 0 ELSE 1 END hasQa,
-    ENT.entryDate hireDate
+    ENT.entryDate hireDate,
+    LOC.city,
+    LOC.locationName
+    
 FROM 
     EMPDB.T_EMPLOYEE EMP
     INNER JOIN EMPDB.T_TITLE TTL ON EMP.titleId = TTL.titleId
@@ -473,6 +536,9 @@ FROM
     LEFT OUTER JOIN EMPDB.T_ENTRY ENT on EMP.employeeId = ENT.employeeId AND ENT.entryType = 1
     LEFT OUTER JOIN EMPDB.T_ORGANIZATION ORG on EMP.organizationId = ORG.organizationId
     LEFT OUTER JOIN EMPDB.T_EMPLOYEE_ANSWER AWS on EMP.employeeId = AWS.employeeId
+    LEFT OUTER JOIN EMPDB.T_LOCATION LOC on EMP.locationId = LOC.locationId
+WHERE
+    (PHN.contact = '' OR MOB.contact = '' OR ES1.contact = '' OR ES2.contact = '' OR ES3.contact = '')
 
 SELECT
     DPT.departmentId, 
@@ -550,27 +616,76 @@ FROM
     FULL JOIN EMPDB.T_EMPLOYEE EMP on CNT.employeeId = EMP.employeeId
 WHERE
     EMP.employeeId = 313
+
+
+INSERT INTO [EMPDB].[T_CONTACT]([contactId], [employeeId], [contact], [contactTypeId]) VALUES(0, 0, '', 0)
+GO
+
+
+SELECT
+    EQA.employeeAnswerId, 
+    EQA.questionNumber,
+    QA.questionText question, 
+    QA.questionId questionId, 
+    EQA.answer answer
+FROM 
+    EMPDB.T_EMPLOYEE EMP
+    INNER JOIN EMPDB.T_EMPLOYEE_ANS EQA on EMP.employeeId = EQA.employeeId
+    LEFT OUTER JOIN EMPDB.T_QUESTION QA on EQA.questionId = QA.questionId
+    
+
+UPDATE [EMPDB].[T_EMPLOYEE_ANS] SET [questionNumber]=@questionNumber, [questionId]=@questionId, [answer]=@answer WHERE employeeAnswerId = @employeeAnswerId
+
+INSERT INTO [EMPDB].[T_EMPLOYEE_ANS]([employeeId], [questionNumber], [questionId], [answer]) VALUES(@employeeId, @questionNumber, @questionId, @answer)
+GO
+
+UPDATE [EMPDB].[T_CONTACT] SET [employeeId]=@employeeId, [contact]=@contactId, [contactTypeId]=@contactTypeId WHERE contactId = @contactId
+
+SELECT * 
+FROM 
+    #LOCATION LOC
+
     
 
 
+SET IDENTITY_INSERT EMPDB.T_LOCATION ON
+
+
+INSERT INTO [EMPDB].[T_LOCATION]([locationId], [locationName], [address1], [address2], [city], [state], [postalCode], [mainPhone]) 
+SELECT locationId, locationName, address1, address2, city, state, postalCode, mainPhone 
+FROM 
+    #LOCATION LOC
+
+SET IDENTITY_INSERT EMPDB.T_LOCATION OFF
+
+SELECT * FROM #LOCATION
+
+
+SELECT
+    USR.employeeId, 
+    LOC.locationId
+FROM 
+    #EMPLOYEE EMP
+    LEFT OUTER JOIN EMPDB.T_USER USR on EMP.objectGUID = USR.objectGUID
+    LEFT OUTER JOIN #LOCATION LOC on EMP.LOC_ID = LOC.oldLocationId
+WHERE
+
+
+MERGE INTO EMPDB.T_EMPLOYEE EMP
+   USING (
+          SELECT
+                USR.employeeId, 
+                LOC.locationId
+            FROM 
+                #EMPLOYEE EMP
+                LEFT OUTER JOIN EMPDB.T_USER USR on EMP.objectGUID = USR.objectGUID
+                LEFT OUTER JOIN #LOCATION LOC on EMP.LOC_ID = LOC.oldLocationId
+         ) S
+      ON EMP.employeeId = S.employeeId
+WHEN MATCHED THEN
+   UPDATE 
+      SET locationId = S.locationId;
     
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
