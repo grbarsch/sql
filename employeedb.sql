@@ -269,13 +269,34 @@ CREATE TABLE [EMPDB].[T_USER]  (
 )
 GO
 
+CREATE TABLE [EMPDB].[T_EMPLOYEE_ANSWER]  ( 
+	[employeeAnswerId]    	bigint IDENTITY(1,1) NOT NULL,
+    [employeeId] bigint NOT NULL,
+	[question1Id]	bigint NOT NULL,
+	[question2Id]  	bigint NOT NULL,
+	[answer1Id]  	varchar(1000) NOT NULL,
+    [answer2Id]  	varchar(1000) NOT NULL,
+    CONSTRAINT [PK_EMPLOYEE_ANSWER#employeeAnswerId] PRIMARY KEY NONCLUSTERED([employeeAnswerId]) 
+)
+GO
+
+CREATE TABLE [EMPDB].[T_EMPLOYEE_ANSWER]  ( 
+	[employeeAnswerId]    	bigint IDENTITY(1,1) NOT NULL,
+    [employeeId] bigint NOT NULL,
+	[question1Id]	bigint NOT NULL,
+	[question2Id]  	bigint NOT NULL,
+	[answer1Id]  	varchar(1000) NOT NULL,
+    [answer2Id]  	varchar(1000) NOT NULL,
+    CONSTRAINT [PK_EMPLOYEE_ANSWER#employeeAnswerId] PRIMARY KEY NONCLUSTERED([employeeAnswerId]) 
+)
+GO
 
 
-CREATE TABLE [EMPDB].[T_DEPARTMENT]  ( 
-	[departmentId]    	int IDENTITY(1,1) NOT NULL,
-	[departmentNumber]	varchar(7) NULL,
-	[departmentName]  	varchar(40) NULL,
-    CONSTRAINT [PK_DEPARTMENT#departmentId] PRIMARY KEY NONCLUSTERED([departmentId])  
+
+CREATE TABLE [EMPDB].[T_QUESTION]  ( 
+	[questionId]    	int IDENTITY(1,1) NOT NULL,
+	[questionText]	varchar(1000) NOT NULL,
+    CONSTRAINT [PK_QUESTION#questionId] PRIMARY KEY NONCLUSTERED([questionId])  
 )
 GO
 
@@ -425,6 +446,7 @@ SELECT
     USR.objectGUID,
     MGR.employeeId managerId,
     CASE WHEN MGR.employeeId IS NULL THEN NULL ELSE CONCAT(MGR.lastName, ', ', MGR.firstName) END managerName,
+    CASE WHEN AWS.employeeAnswerId IS NULL THEN 0 ELSE 1 END hasQa,
     ENT.entryDate hireDate
 FROM 
     EMPDB.T_EMPLOYEE EMP
@@ -450,20 +472,88 @@ FROM
     LEFT OUTER JOIN EMPDB.T_USER USR ON EMP.employeeId = USR.employeeId
     LEFT OUTER JOIN EMPDB.T_ENTRY ENT on EMP.employeeId = ENT.employeeId AND ENT.entryType = 1
     LEFT OUTER JOIN EMPDB.T_ORGANIZATION ORG on EMP.organizationId = ORG.organizationId
+    LEFT OUTER JOIN EMPDB.T_EMPLOYEE_ANSWER AWS on EMP.employeeId = AWS.employeeId
 
-
+SELECT
+    DPT.departmentId, 
+    DPT.departmentNumber, 
+    DPT.departmentName
+FROM 
+    EMPDB.T_DEPARTMENT DPT
 
 
 SELECT * FROM EMPDB.T_EMPLOYEE
 SELECT * FROM EMPDB.T_TITLE
 SELECT * FROM EMPDB.T_USER
-SELECT * FROM EMPDB.T_DEPARTMENT
+
 SELECT * FROM EMPDB.T_ALIAS
 SELECT * FROM EMPDB.T_CONTACT
 SELECT * FROM EMPDB.T_ENTRY
 SELECT * FROM EMPDB.T_CONTACT_TYPE
+SELECT
+    ROW_NUMBER() OVER(ORDER BY type, id ASC) AS metaId, 
+    id, 
+    description, 
+    type
+FROM (
+SELECT
+    contactTypeId id, 
+    contactType description,
+    1 type
+FROM
+    EMPDB.T_CONTACT_TYPE
+UNION ALL
+SELECT
+    organizationId id, 
+    organization description,
+    2 type
+FROM
+    EMPDB.T_ORGANIZATION
+UNION ALL
+SELECT
+    questionId id, 
+    questionText description,
+    3 type
+FROM
+    EMPDB.T_QUESTION
+) MTA
+
+SELECT
+    CNT.contactId,
+    EMP.employeeId,
+    CNT.contactTypeId,
+    CTP.contactType, 
+    CNT.contact
+FROM
+    EMPDB.T_EMPLOYEE EMP
+    LEFT OUTER JOIN EMPDB.T_CONTACT CNT on EMP.employeeId = CNT.employeeId
+    LEFT OUTER JOIN EMPDB.T_CONTACT_TYPE CTP on CNT.contactTypeId = CTP.contactTypeId
+WHERE
+    EMP.employeeId = 313
+
+SELECT
+*
+FROM
+    EMPDB.T_EMPLOYEE EMP
+    FULL JOIN EMPDB.T_CONTACT CNT on EMP.employeeId = CNT.employeeId
+    LEFT OUTER JOIN EMPDB.T_CONTACT_TYPE CTP on CNT.contactTypeId = CTP.contactTypeId
+    
+WHERE
+    EMP.employeeId = 313
+
+SELECT
+*
+FROM
+    
+    EMPDB.T_CONTACT CNT 
+    INNER JOIN EMPDB.T_CONTACT_TYPE CTP on CNT.contactTypeId = CTP.contactTypeId
+    FULL JOIN EMPDB.T_EMPLOYEE EMP on CNT.employeeId = EMP.employeeId
+WHERE
+    EMP.employeeId = 313
+    
 
 
+    
 
 
 
